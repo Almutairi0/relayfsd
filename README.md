@@ -5,7 +5,7 @@
 ![Paramiko](https://img.shields.io/badge/paramiko-SFTP-orange)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
-A lightweight Python tool that monitors a Windows download folder (such as a torrent directory) and automatically uploads completed files to a Linux server via SFTP. It ensures the file is fully downloaded before uploading.
+A lightweight Python tool that monitors a Windows download folder (such as a torrent directory) and automatically uploads completed files to a Linux server via SFTP.
 
 It uses:
 
