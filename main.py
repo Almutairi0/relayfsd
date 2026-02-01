@@ -8,6 +8,12 @@ import paramiko
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
+logging.basicConfig(
+    filename="torrentsync.log",
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+)
+
 with open('data.json', 'r') as json_file:
     data = json.load(json_file)
 
@@ -15,20 +21,29 @@ def on_created(event):
     if event.is_directory:
         return
     filepath = event.src_path
-    print(f"Found: {filepath}")
+    logging.info(f"Found: {filepath}")
     
-    print("Now Uploading")
-    
-    #Uplaod now
+    logging.info("Now Uploading")
+    try:
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(
+            hostname=data["ip"],
+            username=data["username"],
+            password=data["password"],
+            port=22
+        )
 
-    ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh.connect(hostname = data["ip"],username = data["username"],password = data["password"],port=22)
-    sftp_client = ssh.open_sftp() 
-    sftp_client.put(filepath, f'{data["remote_dir"]}/{os.path.basename(filepath)}')
-    sftp_client.close()
-    ssh.close()
-    print("upload complete")
+        sftp = ssh.open_sftp()
+        sftp.put(filepath, f'{data["remote_dir"]}/{os.path.basename(filepath)}')
+        sftp.close()
+        ssh.close()
+
+        logging.info("Upload complete")
+
+    except Exception:
+        logging.exception("Upload failed for %s", filepath)
+    
 
 if __name__ == "__main__":
     event_handler = FileSystemEventHandler()
@@ -40,11 +55,11 @@ if __name__ == "__main__":
     observer.schedule(event_handler, watch_path, recursive=True)
     observer.start()
     try:
-        print("Monitoring")
+        logging.info("Monitoring")
         while True:
             time.sleep(1)
     finally:
         observer.stop()
-        print("Done")
+        logging.info("Done")
         observer.join()
 
