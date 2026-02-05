@@ -19,7 +19,8 @@ It uses:
 -  Monitors any folder for new files   
 -  Automatically uploads files to a Linux server  
 -  Runs continuously in the background  
--  Lightweight and easy to customize  
+-  Lightweight and easy to customize
+-  Log events to a file instead of printing to console.
 
 ---
 
@@ -49,20 +50,13 @@ pip install watchdog paramiko
 ```bash
 python main.py
 ```
-The script will monitor the folder and print messages like:
+The script will monitor the folder and the log will be like:
 ```console
-Monitoring
-Found: vid.mp4
-Now Uploading ..
-upload complete
+2026-02-05 13:02:11,184 | INFO | Monitoring
+2026-02-05 13:05:42,903 | INFO | Found: R:\Torrent\New\blalba.S01E01.mkv
+2026-02-05 13:05:42,904 | INFO | Now Uploading
+2026-02-05 13:06:58,221 | INFO | upload complete
+2026-02-05 13:10:33,990 | INFO | Found: R:\Torrent\New\Blabla.s01e02.mkv
+2026-02-05 13:10:33,991 | INFO | Now Uploading
+2026-02-05 13:12:04,558 | INFO | upload complete
 ```
----
-## If you want to contribute fell free to add this improvements.
-
-- Log events to a file instead of printing to console.
-
-- Use SSH keys instead of passwords for secure authentication.
-
-- Move or delete files locally after upload.
-
-- Send notifications (Telegram/Discord) after upload.
