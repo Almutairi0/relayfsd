@@ -21,6 +21,7 @@ It uses:
 -  Runs continuously in the background  
 -  Lightweight and easy to customize
 -  Log events to a file instead of printing to console.
+-  Send notifications Discord after upload.
 
 ---
 
@@ -40,7 +41,13 @@ pip install watchdog paramiko
   "username": "your_ssh_username",
   "password": "your_ssh_password",
   "watch_path": "R:/Torrent/Completed",
-  "remote_dir": "/DATA/Media/TV"
+  "remote_dir": "/DATA/Media/TV",
+  "notifications": {
+    "discord": {
+      "enabled": true,
+      "webhook_url": "YOUR_WEBHOOK_URL"
+    }
+  }
 }
 ```
 

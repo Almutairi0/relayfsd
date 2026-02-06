@@ -3,5 +3,11 @@
   "username": "your_ssh_username",
   "password": "your_ssh_password",
   "watch_path": "R:/Torrent/Completed",
-  "remote_dir": "/DATA/Media/TV"
+  "remote_dir": "/DATA/Media/TV",
+  "notifications": {
+    "discord": {
+      "enabled": true,
+      "webhook_url": "YOUR_WEBHOOK_URL"
+    }
+  }
 }

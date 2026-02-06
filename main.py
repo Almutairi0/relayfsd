@@ -1,4 +1,5 @@
 import json
+import requests
 import logging
 import os
 import sys
@@ -16,6 +17,30 @@ logging.basicConfig(
 
 with open('data.json', 'r') as json_file:
     data = json.load(json_file)
+
+
+def notify_discord(message: str):
+    discord_cfg = data.get("notifications", {}).get("discord", {})
+
+    if not discord_cfg.get("enabled"):
+        return
+
+    webhook_url = discord_cfg.get("webhook_url")
+    if not webhook_url:
+        logging.warning("Discord notifications enabled but webhook_url is missing")
+        return
+
+    payload = {
+        "content": message
+    }
+
+    try:
+        response = requests.post(webhook_url, json=payload, timeout=5)
+        if response.status_code not in (200, 204):
+            logging.error(f"Discord notification failed: {response.status_code}")
+    except Exception as e:
+        logging.error(f"Discord notification error: {e}")
+
 
 def on_created(event):
     if event.is_directory:
@@ -40,9 +65,16 @@ def on_created(event):
         ssh.close()
 
         logging.info("Upload complete")
+        notify_discord(
+            f" Uploaded: {os.path.basename(filepath)} → {data['remote_dir']}"
+        )
 
-    except Exception:
-        logging.exception("Upload failed for %s", filepath)
+
+    except Exception as e:
+        logging.exception(f"Upload failed for {filepath}: {e}")
+        notify_discord(
+        f" Upload failed: {os.path.basename(filepath)}\nReason: {e}"
+        )
     
 
 if __name__ == "__main__":
