@@ -1,4 +1,4 @@
-# TorrentSync
+# relayfsd
 
 ![Python](https://img.shields.io/badge/python-3.8+-blue?logo=python)
 ![Watchdog](https://img.shields.io/badge/watchdog-monitored-green)
