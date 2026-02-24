@@ -12,3 +12,5 @@ dependencies = [
     "paramiko",
     "requests"
 ]
+[project.scripts]
+relayfsd = "relayfsd.main:main"
