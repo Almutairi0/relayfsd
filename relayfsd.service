@@ -1,0 +1,13 @@
+[Unit]
+Description=relayfsd - monitors a dir and uploads files via SFTP
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h
+ExecStart=/usr/bin/relayfsd
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
