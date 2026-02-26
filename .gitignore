@@ -1,7 +1,6 @@
 data.json
 *.log
 venv/
-relayfsd.go
 # Arch Linux temporary build folders
 /pkg/
 *.pkg.tar.zst
@@ -13,3 +12,15 @@ relayfsd.go
 **/build/
 **/dist/
 **/*.egg-info/
+
+# Compiled binary
+relayfsd
+relayfsd.exe
+
+# Go build cache
+*.test
+*.out
+
+# OS junk
+.DS_Store
+Thumbs.db
