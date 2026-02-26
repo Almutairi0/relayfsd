@@ -69,10 +69,10 @@ func runConfigWizard() {
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Println()
 	fmt.Println("You can now run the program normally:")
-	fmt.Println("  ./torrentsync")
+	fmt.Println("  ./relayfsd")
 	fmt.Println()
 	fmt.Println("To update your config at any time, run:")
-	fmt.Println("  ./torrentsync --config")
+	fmt.Println("  ./relayfsd --config")
 	fmt.Println()
 }
 

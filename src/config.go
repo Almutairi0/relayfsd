@@ -32,10 +32,10 @@ func loadConfig() {
 		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 		fmt.Println("⚠️  No configuration found!")
 		fmt.Println()
-		fmt.Println("Before using TorrentSync, you need to set")
+		fmt.Println("Before using Relayfsd, you need to set")
 		fmt.Println("up your server details by running:")
 		fmt.Println()
-		fmt.Println("  ./torrentsync --config")
+		fmt.Println("  ./relayfsd --config")
 		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 		os.Exit(1)
 	}

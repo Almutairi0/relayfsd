@@ -17,7 +17,7 @@ func main() {
 	loadConfig()
 
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Printf("✅ TorrentSync started\n")
+	fmt.Printf(" Relayfsd started\n")
 	fmt.Printf("   Watching : %s\n", cfg.WatchPath)
 	fmt.Printf("   Remote   : %s@%s:%s\n", cfg.Username, cfg.IP, cfg.RemoteDir)
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -30,7 +30,7 @@ func main() {
 }
 
 func initLogger() {
-	f, err := os.OpenFile("torrentsync.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile("relayfsd.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Fatal(err)
 	}
