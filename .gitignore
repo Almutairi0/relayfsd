@@ -24,3 +24,6 @@ relayfsd.exe
 # OS junk
 .DS_Store
 Thumbs.db
+
+src/data.json
+src/relayfsd

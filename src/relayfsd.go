@@ -19,7 +19,7 @@ func main() {
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Printf(" Relayfsd started\n")
 	fmt.Printf("   Watching : %s\n", cfg.WatchPath)
-	fmt.Printf("   Remote   : %s@%s:%s\n", cfg.Username, cfg.IP, cfg.RemoteDir)
+	fmt.Printf("   Destination   : %s@%s:%s\n", cfg.Username, cfg.IP, cfg.RemoteDir)
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
 	if err := startWatcher(); err != nil {
