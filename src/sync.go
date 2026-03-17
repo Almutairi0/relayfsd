@@ -14,7 +14,7 @@ func fileBase(path string) string {
 func handleNewFile(localPath string) {
 	filename := fileBase(localPath)
 	logger.Printf("INFO | Found: %s", localPath)
-	logger.Println("INFO | Now Uploading")
+	logger.Printf("INFO | Now Uploading: %s", filename)
 
 	conn, err := newSSHClient()
 	if err != nil {
