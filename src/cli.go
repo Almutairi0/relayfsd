@@ -29,6 +29,59 @@ func runConfigWizard() {
 	cfg.WatchPath = promptString(reader, "Local folder to watch (e.g. /home/user/torrents)", existing.WatchPath)
 
 	fmt.Println()
+	fmt.Println("Which side do you want to watch for new files?")
+	fmt.Println("  1) local  - watch your local folder (default)")
+	fmt.Println("  2) remote - watch the remote server folder")
+	fmt.Print("Choice [")
+	if existing.WatchSide != "" {
+		fmt.Print(existing.WatchSide)
+	} else {
+		fmt.Print("local")
+	}
+	fmt.Print("]: ")
+
+	watchInput, _ := reader.ReadString('\n')
+	watchInput = strings.TrimSpace(watchInput)
+	switch watchInput {
+	case "2", "remote":
+		cfg.WatchSide = "remote"
+	case "1", "local", "":
+		cfg.WatchSide = "local"
+	default:
+		if existing.WatchSide != "" {
+			cfg.WatchSide = existing.WatchSide
+		} else {
+			cfg.WatchSide = "local"
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("Where should new files be sent?")
+	fmt.Println("  1) remote - upload to remote server (default)")
+	fmt.Println("  2) local  - download to local folder")
+	fmt.Print("Choice [")
+	if existing.DestSide != "" {
+		fmt.Print(existing.DestSide)
+	} else {
+		fmt.Print("remote")
+	}
+	fmt.Print("]: ")
+
+	destInput, _ := reader.ReadString('\n')
+	destInput = strings.TrimSpace(destInput)
+	switch destInput {
+	case "2", "local":
+		cfg.DestSide = "local"
+	case "1", "remote", "":
+		cfg.DestSide = "remote"
+	default:
+		if existing.DestSide != "" {
+			cfg.DestSide = existing.DestSide
+		} else {
+			cfg.DestSide = "remote"
+		}
+	}
+	fmt.Println()
 	fmt.Print("Enable Discord notifications? (y/n) [")
 	if existing.Notifications.Discord.Enabled {
 		fmt.Print("y")

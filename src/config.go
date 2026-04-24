@@ -15,6 +15,8 @@ type Config struct {
 	Password      string `json:"password"`
 	RemoteDir     string `json:"remote_dir"`
 	WatchPath     string `json:"watch_path"`
+	WatchSide     string `json:"watch_side"`
+	DestSide      string `json:"dest_side"`
 	Notifications struct {
 		Discord struct {
 			Enabled    bool   `json:"enabled"`

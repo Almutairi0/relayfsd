@@ -37,3 +37,34 @@ func uploadViaSFTP(conn *ssh.Client, localPath string) error {
 
 	return nil
 }
+
+// Existing uploadViaSFTP stays as is, add below:
+
+func downloadViaSFTP(conn *ssh.Client, remotePath string) error {
+	sftpClient, err := sftp.NewClient(conn)
+	if err != nil {
+		return fmt.Errorf("failed to create SFTP client: %w", err)
+	}
+	defer sftpClient.Close()
+
+	srcFile, err := sftpClient.Open(remotePath)
+	if err != nil {
+		return fmt.Errorf("failed to open remote file: %w", err)
+	}
+	defer srcFile.Close()
+
+	filename := fileBase(remotePath)
+	localPath := cfg.WatchPath + "/" + filename
+
+	dstFile, err := os.Create(localPath)
+	if err != nil {
+		return fmt.Errorf("failed to create local file at %s: %w", localPath, err)
+	}
+	defer dstFile.Close()
+
+	if _, err := io.Copy(dstFile, srcFile); err != nil {
+		return fmt.Errorf("file copy failed: %w", err)
+	}
+
+	return nil
+}

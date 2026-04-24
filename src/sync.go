@@ -11,25 +11,49 @@ func fileBase(path string) string {
 	return filepath.Base(path)
 }
 
+<<<<<<< Updated upstream
 func handleNewFile(localPath string) {
 	filename := fileBase(localPath)
 	logger.Printf("INFO | Found: %s", localPath)
-	logger.Printf("INFO | Now Uploading: %s", filename)
+	logger.Println("INFO | Now Uploading")
+=======
+func handleNewFile(path string, side string) {
+	filename := fileBase(path)
+	logger.Printf("INFO | Found: %s (on %s)", path, side)
+	logger.Printf("INFO | Now Syncing: %s", filename)
+>>>>>>> Stashed changes
 
 	conn, err := newSSHClient()
 	if err != nil {
-		logger.Printf("ERROR | Upload failed for %s: %v", localPath, err)
-		notifyDiscord(fmt.Sprintf("Upload failed: %s\nReason: %v", filename, err))
+		logger.Printf("ERROR | Sync failed for %s: %v", path, err)
+		notifyDiscord(fmt.Sprintf("Sync failed: %s\nReason: %v", filename, err))
 		return
 	}
 	defer conn.Close()
 
-	if err := uploadViaSFTP(conn, localPath); err != nil {
-		logger.Printf("ERROR | Upload failed for %s: %v", localPath, err)
-		notifyDiscord(fmt.Sprintf("Upload failed: %s\nReason: %v", filename, err))
+	// Route direction based on config
+	if side == "local" && cfg.DestSide == "remote" {
+		// local → remote (original behavior)
+		err = uploadViaSFTP(conn, path)
+	} else if side == "remote" && cfg.DestSide == "local" {
+		// remote → local (new)
+		err = downloadViaSFTP(conn, path)
+	} else {
+		logger.Printf("WARN | Unsupported direction: watch=%s dest=%s", side, cfg.DestSide)
 		return
 	}
 
-	logger.Printf("INFO | Upload complete: %s", filename)
+<<<<<<< Updated upstream
+	logger.Println("INFO | Upload complete")
 	notifyDiscord(fmt.Sprintf("Uploaded: %s → %s", filename, cfg.RemoteDir))
+=======
+	if err != nil {
+		logger.Printf("ERROR | Sync failed for %s: %v", path, err)
+		notifyDiscord(fmt.Sprintf("Sync failed: %s\nReason: %v", filename, err))
+		return
+	}
+
+	logger.Printf("INFO | Sync complete: %s", filename)
+	notifyDiscord(fmt.Sprintf("Synced: %s → %s", filename, cfg.DestSide))
+>>>>>>> Stashed changes
 }

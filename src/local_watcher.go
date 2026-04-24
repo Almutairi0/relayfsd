@@ -28,7 +28,7 @@ func startWatcher() error {
 		return err
 	}
 
-	logger.Println("INFO | Monitoring")
+	logger.Println("INFO | Monitoring local", cfg.WatchPath)
 
 	done := make(chan struct{})
 
@@ -49,8 +49,7 @@ func startWatcher() error {
 						// Watch newly created subdirectories
 						_ = watcher.Add(event.Name)
 					} else {
-						// Upload newly created files in a goroutine
-						go handleNewFile(event.Name)
+						go handleNewFile(event.Name, "local")
 					}
 				}
 
