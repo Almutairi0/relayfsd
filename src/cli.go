@@ -25,8 +25,6 @@ func runConfigWizard() {
 	cfg.IP = promptString(reader, "Remote server IP", existing.IP)
 	cfg.Username = promptString(reader, "SSH username", existing.Username)
 	cfg.Password = promptPassword("SSH password", existing.Password)
-	cfg.RemoteDir = promptString(reader, "Remote directory (e.g. /home/user/downloads)", existing.RemoteDir)
-	cfg.WatchPath = promptString(reader, "Local folder to watch (e.g. /home/user/torrents)", existing.WatchPath)
 
 	fmt.Println()
 	fmt.Println("Which side do you want to watch for new files?")
@@ -80,6 +78,14 @@ func runConfigWizard() {
 		} else {
 			cfg.DestSide = "remote"
 		}
+	}
+	fmt.Println()
+	if cfg.WatchSide == "local" {
+		cfg.WatchPath = promptString(reader, "Local folder to watch (e.g. /home/user/torrents)", existing.WatchPath)
+		cfg.RemoteDir = promptString(reader, "Remote directory to send files to (e.g. /home/user/downloads)", existing.RemoteDir)
+	} else {
+		cfg.RemoteDir = promptString(reader, "Remote directory to watch (e.g. /home/user/downloads)", existing.RemoteDir)
+		cfg.WatchPath = promptString(reader, "Local folder to save files to (e.g. /home/user/downloads)", existing.WatchPath)
 	}
 	fmt.Println()
 	fmt.Print("Enable Discord notifications? (y/n) [")
