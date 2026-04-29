@@ -14,7 +14,7 @@ A lightweight tool that monitors a directory and automatically uploads new or co
 - Lightweight and easy to configure
 - Log events to a file
 - Send notifications (Discord support)
-
+- The ability to transfer files from a remote system to the local machine.
 ---
 
 ## Installation
