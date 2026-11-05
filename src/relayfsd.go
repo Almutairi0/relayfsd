@@ -19,6 +19,11 @@ func main() {
 		fmt.Println("❌", err)
 		os.Exit(1)
 	}
+	if err := setupAfterUpload(); err != nil {
+		logger.Printf("FATAL | after_upload setup failed: %v", err)
+		fmt.Println("❌", err)
+		os.Exit(1)
+	}
 
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Printf(" Relayfsd started\n")
@@ -26,6 +31,9 @@ func main() {
 	fmt.Printf("   Sending  : %s (%s)\n", destTarget(), cfg.DestSide)
 	fmt.Printf("   Remote   : %s@%s:%s\n", cfg.Username, cfg.IP, cfg.RemoteDir)
 	fmt.Printf("   Auth     : %s\n", authMethod())
+	if afterUploadApplies() && afterUploadAction() != afterUploadKeep {
+		fmt.Printf("   After    : %s %s\n", afterUploadAction(), cfg.MoveDir)
+	}
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
 	var err error

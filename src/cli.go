@@ -131,6 +131,10 @@ func runConfigWizard() {
 		cfg.RemoteDir = promptString(reader, "Remote directory to watch (e.g. /home/user/downloads)", existing.RemoteDir)
 		cfg.WatchPath = promptString(reader, "Local folder to save files to (e.g. /home/user/downloads)", existing.WatchPath)
 	}
+
+	if afterUploadApplies() {
+		promptAfterUpload(reader, existing)
+	}
 	fmt.Println()
 	fmt.Print("Enable Discord notifications? (y/n) [")
 	if existing.Notifications.Discord.Enabled {
@@ -224,4 +228,56 @@ func promptPassword(label string, current string) string {
 		return current
 	}
 	return input
+}
+
+// promptAfterUpload asks what to do with local files after upload.
+// Choosing delete requires typing "yes" so it can't be picked by accident.
+func promptAfterUpload(reader *bufio.Reader, existing Config) {
+	current := existing.AfterUpload
+	if current == "" {
+		current = afterUploadKeep
+	}
+
+	fmt.Println()
+	fmt.Println("What should happen to local files after a successful upload?")
+	fmt.Println("  1) keep   - leave them where they are (default)")
+	fmt.Println("  2) move   - move them to another folder")
+	fmt.Println("  3) delete - delete them to free up space")
+	fmt.Printf("Choice [%s]: ", current)
+
+	input, _ := reader.ReadString('\n')
+	switch strings.TrimSpace(input) {
+	case "1", "keep":
+		cfg.AfterUpload = afterUploadKeep
+	case "2", "move":
+		cfg.AfterUpload = afterUploadMove
+	case "3", "delete":
+		cfg.AfterUpload = afterUploadDelete
+	default:
+		cfg.AfterUpload = current
+	}
+
+	switch cfg.AfterUpload {
+	case afterUploadMove:
+		for {
+			cfg.MoveDir = promptString(reader, "Folder to move uploaded files to (outside the watch folder)", existing.MoveDir)
+			err := validateMoveDir(cfg.MoveDir)
+			if err == nil {
+				break
+			}
+			fmt.Printf("⚠️  %v\n", err)
+			existing.MoveDir = ""
+		}
+
+	case afterUploadDelete:
+		fmt.Println()
+		fmt.Println("⚠️  Local files will be permanently deleted once their upload is verified.")
+		fmt.Println("   Files that change during upload are never deleted.")
+		fmt.Print("Type 'yes' to confirm: ")
+		confirm, _ := reader.ReadString('\n')
+		if strings.TrimSpace(strings.ToLower(confirm)) != "yes" {
+			fmt.Println("Not confirmed, keeping files instead.")
+			cfg.AfterUpload = afterUploadKeep
+		}
+	}
 }

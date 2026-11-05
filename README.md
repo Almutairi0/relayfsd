@@ -15,6 +15,8 @@ A lightweight tool that monitors a directory and automatically uploads new or co
 - Log events to a file
 - Send notifications (Discord support)
 - The ability to transfer files from a remote system to the local machine.
+- SSH key authentication
+- Optionally move or delete local files after upload
 ---
 
 ## Installation
@@ -89,6 +91,28 @@ The resulting `data.json` contains:
 Existing configs with no `auth_method` keep using password authentication. To switch, follow the steps above. Choosing `key` in the wizard removes the stored password from `data.json`.
 
 If authentication fails, Relayfsd logs which method it tried and the most likely fix. For key auth, check that the public key is in `~/.ssh/authorized_keys` on the server.
+
+### After upload: keep, move or delete local files
+
+When uploading local files to the server, Relayfsd can clean up after itself. Choose this in `./relayfsd --config`, or set it in `data.json`:
+
+```json
+"after_upload": "move",
+"move_dir": "/home/user/uploaded"
+```
+
+| `after_upload` | Effect |
+|---|---|
+| `keep` (default) | Local files are left untouched |
+| `move` | Files are moved to `move_dir`. Name clashes get a ` (1)` suffix |
+| `delete` | Files are permanently deleted |
+
+Safeguards:
+- A file is only moved or deleted after the remote copy is verified to be the same size.
+- If the file changed during the upload (for example, it was still being written), it is left in place.
+- `move_dir` must be outside the watch folder, otherwise moved files would be uploaded again.
+- The wizard asks you to type `yes` before enabling `delete`.
+- Every move, delete, skip and failure is written to `relayfsd.log`. Failures also trigger a Discord notification.
 
 ---
 

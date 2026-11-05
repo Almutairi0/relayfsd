@@ -20,6 +20,8 @@ type Config struct {
 	WatchPath     string `json:"watch_path"`
 	WatchSide     string `json:"watch_side"`
 	DestSide      string `json:"dest_side"`
+	AfterUpload   string `json:"after_upload"`       // "keep" (default), "move" or "delete"
+	MoveDir       string `json:"move_dir,omitempty"` // target folder when after_upload is "move"
 	Notifications struct {
 		Discord struct {
 			Enabled    bool   `json:"enabled"`
