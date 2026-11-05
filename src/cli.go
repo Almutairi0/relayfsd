@@ -24,7 +24,51 @@ func runConfigWizard() {
 
 	cfg.IP = promptString(reader, "Remote server IP", existing.IP)
 	cfg.Username = promptString(reader, "SSH username", existing.Username)
-	cfg.Password = promptPassword("SSH password", existing.Password)
+
+	fmt.Println()
+	fmt.Println("How should Relayfsd log in to the server?")
+	fmt.Println("  1) key      - SSH key pair (recommended)")
+	fmt.Println("  2) password - SSH password")
+	currentAuth := existing.AuthMethod
+	if currentAuth == "" {
+		if existing.Password != "" {
+			currentAuth = "password" // config from before key support
+		} else {
+			currentAuth = "key"
+		}
+	}
+	fmt.Printf("Choice [%s]: ", currentAuth)
+
+	authInput, _ := reader.ReadString('\n')
+	switch strings.TrimSpace(authInput) {
+	case "1", "key":
+		cfg.AuthMethod = "key"
+	case "2", "password":
+		cfg.AuthMethod = "password"
+	default:
+		cfg.AuthMethod = currentAuth
+	}
+
+	if cfg.AuthMethod == "key" {
+		defaultKey := existing.KeyPath
+		if defaultKey == "" {
+			defaultKey = "~/.ssh/id_ed25519"
+		}
+		cfg.KeyPath = promptString(reader, "Path to private key", defaultKey)
+		cfg.KeyPassphrase = promptPassword("Key passphrase (leave empty if none)", existing.KeyPassphrase)
+		// Password is intentionally not carried over: switching to key auth
+		// removes the stored plaintext password from data.json.
+
+		if _, err := loadPrivateKey(cfg.KeyPath, cfg.KeyPassphrase); err != nil {
+			fmt.Printf("⚠️  %v\n", err)
+			fmt.Println("   Generate a key and install it on the server with:")
+			fmt.Println("     ssh-keygen -t ed25519")
+			fmt.Printf("     ssh-copy-id %s@%s\n", cfg.Username, cfg.IP)
+			fmt.Println("   The config will still be saved; fix the key before starting Relayfsd.")
+		}
+	} else {
+		cfg.Password = promptPassword("SSH password", existing.Password)
+	}
 
 	fmt.Println()
 	fmt.Println("Which side do you want to watch for new files?")

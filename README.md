@@ -57,6 +57,39 @@ go run . --config
 
 Edit the configuration file to set your server details, watch directory, and destination directory path.
 
+### SSH key authentication (recommended)
+
+Relayfsd can log in with an SSH key pair instead of a password.
+
+1. Generate a key pair on the local machine (skip this if you already have one):
+```bash
+ssh-keygen -t ed25519
+```
+
+2. Copy the public key to the server:
+```bash
+ssh-copy-id user@server-ip
+```
+
+3. Check that key login works:
+```bash
+ssh user@server-ip
+```
+
+4. Run `./relayfsd --config`, choose `key`, and enter the path to your private key (default `~/.ssh/id_ed25519`). If the key has a passphrase, enter it when prompted.
+
+The resulting `data.json` contains:
+```json
+"auth_method": "key",
+"key_path": "~/.ssh/id_ed25519"
+```
+
+### Migrating from password authentication
+
+Existing configs with no `auth_method` keep using password authentication. To switch, follow the steps above. Choosing `key` in the wizard removes the stored password from `data.json`.
+
+If authentication fails, Relayfsd logs which method it tried and the most likely fix. For key auth, check that the public key is in `~/.ssh/authorized_keys` on the server.
+
 ---
 
 ## Usage

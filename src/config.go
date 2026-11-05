@@ -12,7 +12,10 @@ const configFile = "data.json"
 type Config struct {
 	IP            string `json:"ip"`
 	Username      string `json:"username"`
-	Password      string `json:"password"`
+	Password      string `json:"password,omitempty"`
+	AuthMethod    string `json:"auth_method"`              // "password" (default) or "key"
+	KeyPath       string `json:"key_path,omitempty"`       // private key file, used when auth_method is "key"
+	KeyPassphrase string `json:"key_passphrase,omitempty"` // only needed for encrypted keys
 	RemoteDir     string `json:"remote_dir"`
 	WatchPath     string `json:"watch_path"`
 	WatchSide     string `json:"watch_side"`
