@@ -28,5 +28,5 @@ package() {
     install -Dm644 "${srcdir}/relayfsd/README.md" "${pkgdir}/usr/share/doc/${pkgname}/README.md"
 
     # Install systemd service
-    #install -Dm644 "${srcdir}/relayfsd/relayfsd.service" "${pkgdir}/usr/lib/systemd/user/relayfsd.service"
+    install -Dm644 "${srcdir}/relayfsd/relayfsd.service" "${pkgdir}/usr/lib/systemd/user/relayfsd.service"
 }

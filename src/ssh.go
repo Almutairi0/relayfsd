@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -17,10 +18,21 @@ func newSSHClient() (*ssh.Client, error) {
 		Timeout:         10 * time.Second,
 	}
 
-	conn, err := ssh.Dial("tcp", fmt.Sprintf("%s:22", cfg.IP), sshCfg)
+	conn, err := ssh.Dial("tcp", net.JoinHostPort(cfg.IP, "22"), sshCfg)
 	if err != nil {
 		return nil, fmt.Errorf("SSH connection failed: %w", err)
 	}
 
 	return conn, nil
+}
+
+// remoteReachable does a cheap TCP check on the SSH port (no login),
+// used to detect whether the remote device is online.
+func remoteReachable() bool {
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort(cfg.IP, "22"), 2*time.Second)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
 }

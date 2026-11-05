@@ -20,6 +20,9 @@ func handleNewFile(path string, side string) {
 	if err != nil {
 		logger.Printf("ERROR | Sync failed for %s: %v", path, err)
 		notifyDiscord(fmt.Sprintf("Sync failed: %s\nReason: %v", filename, err))
+		if side == "remote" {
+			remoteSeen.unmark(path) // retry on next successful poll
+		}
 		return
 	}
 	defer conn.Close()
@@ -39,6 +42,9 @@ func handleNewFile(path string, side string) {
 	if err != nil {
 		logger.Printf("ERROR | Sync failed for %s: %v", path, err)
 		notifyDiscord(fmt.Sprintf("Sync failed: %s\nReason: %v", filename, err))
+		if side == "remote" {
+			remoteSeen.unmark(path) // retry on next successful poll
+		}
 		return
 	}
 
