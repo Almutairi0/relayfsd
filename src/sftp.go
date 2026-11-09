@@ -29,16 +29,28 @@ func uploadViaSFTP(conn *ssh.Client, localPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create remote file at %s: %w", remotePath, err)
 	}
-	defer dstFile.Close()
 
-	if _, err := io.Copy(dstFile, srcFile); err != nil {
+	written, err := io.Copy(dstFile, srcFile)
+	if err != nil {
+		dstFile.Close()
 		return fmt.Errorf("file copy failed: %w", err)
+	}
+	if err := dstFile.Close(); err != nil {
+		return fmt.Errorf("failed to finish remote file %s: %w", remotePath, err)
+	}
+
+	// Verify the remote copy, so after_upload never removes a local file
+	// whose upload didn't fully land.
+	info, err := sftpClient.Stat(remotePath)
+	if err != nil {
+		return fmt.Errorf("could not verify remote file %s: %w", remotePath, err)
+	}
+	if info.Size() != written {
+		return fmt.Errorf("remote file %s is %d bytes, expected %d", remotePath, info.Size(), written)
 	}
 
 	return nil
 }
-
-// Existing uploadViaSFTP stays as is, add below:
 
 func downloadViaSFTP(conn *ssh.Client, remotePath string) error {
 	sftpClient, err := sftp.NewClient(conn)

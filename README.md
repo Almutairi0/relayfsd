@@ -15,6 +15,8 @@ A lightweight tool that monitors a directory and automatically uploads new or co
 - Log events to a file
 - Send notifications (Discord support)
 - The ability to transfer files from a remote system to the local machine.
+- SSH key authentication
+- Optionally move or delete local files after upload
 ---
 
 ## Installation
@@ -56,6 +58,61 @@ go run . --config
 ## Configuration
 
 Edit the configuration file to set your server details, watch directory, and destination directory path.
+
+### SSH key authentication (recommended)
+
+Relayfsd can log in with an SSH key pair instead of a password.
+
+1. Generate a key pair on the local machine (skip this if you already have one):
+```bash
+ssh-keygen -t ed25519
+```
+
+2. Copy the public key to the server:
+```bash
+ssh-copy-id user@server-ip
+```
+
+3. Check that key login works:
+```bash
+ssh user@server-ip
+```
+
+4. Run `./relayfsd --config`, choose `key`, and enter the path to your private key (default `~/.ssh/id_ed25519`). If the key has a passphrase, enter it when prompted.
+
+The resulting `data.json` contains:
+```json
+"auth_method": "key",
+"key_path": "~/.ssh/id_ed25519"
+```
+
+### Migrating from password authentication
+
+Existing configs with no `auth_method` keep using password authentication. To switch, follow the steps above. Choosing `key` in the wizard removes the stored password from `data.json`.
+
+If authentication fails, Relayfsd logs which method it tried and the most likely fix. For key auth, check that the public key is in `~/.ssh/authorized_keys` on the server.
+
+### After upload: keep, move or delete local files
+
+When uploading local files to the server, Relayfsd can clean up after itself. Choose this in `./relayfsd --config`, or set it in `data.json`:
+
+```json
+"after_upload": "move",
+"move_dir": "/home/user/uploaded"
+```
+
+| `after_upload` | Effect |
+|---|---|
+| `keep` (default) | Local files are left untouched |
+| `move` | Files are moved to `move_dir`. Name clashes get a ` (1)` suffix |
+| `delete` | Files are permanently deleted |
+
+Safeguards:
+- A file is only moved or deleted after the remote copy is verified to be the same size.
+- If the file changed during the upload (for example, it was still being written), it is left in place.
+- `move_dir` must be outside the watch folder, otherwise moved files would be uploaded again.
+- The wizard asks you to type `yes` before enabling `delete`.
+- Every move, delete, skip and failure is written to `relayfsd.log`. Failures also trigger a Discord notification.
 
 ---
 

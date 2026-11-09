@@ -24,7 +24,51 @@ func runConfigWizard() {
 
 	cfg.IP = promptString(reader, "Remote server IP", existing.IP)
 	cfg.Username = promptString(reader, "SSH username", existing.Username)
-	cfg.Password = promptPassword("SSH password", existing.Password)
+
+	fmt.Println()
+	fmt.Println("How should Relayfsd log in to the server?")
+	fmt.Println("  1) key      - SSH key pair (recommended)")
+	fmt.Println("  2) password - SSH password")
+	currentAuth := existing.AuthMethod
+	if currentAuth == "" {
+		if existing.Password != "" {
+			currentAuth = "password" // config from before key support
+		} else {
+			currentAuth = "key"
+		}
+	}
+	fmt.Printf("Choice [%s]: ", currentAuth)
+
+	authInput, _ := reader.ReadString('\n')
+	switch strings.TrimSpace(authInput) {
+	case "1", "key":
+		cfg.AuthMethod = "key"
+	case "2", "password":
+		cfg.AuthMethod = "password"
+	default:
+		cfg.AuthMethod = currentAuth
+	}
+
+	if cfg.AuthMethod == "key" {
+		defaultKey := existing.KeyPath
+		if defaultKey == "" {
+			defaultKey = "~/.ssh/id_ed25519"
+		}
+		cfg.KeyPath = promptString(reader, "Path to private key", defaultKey)
+		cfg.KeyPassphrase = promptPassword("Key passphrase (leave empty if none)", existing.KeyPassphrase)
+		// Password is intentionally not carried over: switching to key auth
+		// removes the stored plaintext password from data.json.
+
+		if _, err := loadPrivateKey(cfg.KeyPath, cfg.KeyPassphrase); err != nil {
+			fmt.Printf("⚠️  %v\n", err)
+			fmt.Println("   Generate a key and install it on the server with:")
+			fmt.Println("     ssh-keygen -t ed25519")
+			fmt.Printf("     ssh-copy-id %s@%s\n", cfg.Username, cfg.IP)
+			fmt.Println("   The config will still be saved; fix the key before starting Relayfsd.")
+		}
+	} else {
+		cfg.Password = promptPassword("SSH password", existing.Password)
+	}
 
 	fmt.Println()
 	fmt.Println("Which side do you want to watch for new files?")
@@ -86,6 +130,10 @@ func runConfigWizard() {
 	} else {
 		cfg.RemoteDir = promptString(reader, "Remote directory to watch (e.g. /home/user/downloads)", existing.RemoteDir)
 		cfg.WatchPath = promptString(reader, "Local folder to save files to (e.g. /home/user/downloads)", existing.WatchPath)
+	}
+
+	if afterUploadApplies() {
+		promptAfterUpload(reader, existing)
 	}
 	fmt.Println()
 	fmt.Print("Enable Discord notifications? (y/n) [")
@@ -180,4 +228,56 @@ func promptPassword(label string, current string) string {
 		return current
 	}
 	return input
+}
+
+// promptAfterUpload asks what to do with local files after upload.
+// Choosing delete requires typing "yes" so it can't be picked by accident.
+func promptAfterUpload(reader *bufio.Reader, existing Config) {
+	current := existing.AfterUpload
+	if current == "" {
+		current = afterUploadKeep
+	}
+
+	fmt.Println()
+	fmt.Println("What should happen to local files after a successful upload?")
+	fmt.Println("  1) keep   - leave them where they are (default)")
+	fmt.Println("  2) move   - move them to another folder")
+	fmt.Println("  3) delete - delete them to free up space")
+	fmt.Printf("Choice [%s]: ", current)
+
+	input, _ := reader.ReadString('\n')
+	switch strings.TrimSpace(input) {
+	case "1", "keep":
+		cfg.AfterUpload = afterUploadKeep
+	case "2", "move":
+		cfg.AfterUpload = afterUploadMove
+	case "3", "delete":
+		cfg.AfterUpload = afterUploadDelete
+	default:
+		cfg.AfterUpload = current
+	}
+
+	switch cfg.AfterUpload {
+	case afterUploadMove:
+		for {
+			cfg.MoveDir = promptString(reader, "Folder to move uploaded files to (outside the watch folder)", existing.MoveDir)
+			err := validateMoveDir(cfg.MoveDir)
+			if err == nil {
+				break
+			}
+			fmt.Printf("⚠️  %v\n", err)
+			existing.MoveDir = ""
+		}
+
+	case afterUploadDelete:
+		fmt.Println()
+		fmt.Println("⚠️  Local files will be permanently deleted once their upload is verified.")
+		fmt.Println("   Files that change during upload are never deleted.")
+		fmt.Print("Type 'yes' to confirm: ")
+		confirm, _ := reader.ReadString('\n')
+		if strings.TrimSpace(strings.ToLower(confirm)) != "yes" {
+			fmt.Println("Not confirmed, keeping files instead.")
+			cfg.AfterUpload = afterUploadKeep
+		}
+	}
 }

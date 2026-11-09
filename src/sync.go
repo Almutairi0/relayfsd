@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 )
 
@@ -28,9 +29,15 @@ func handleNewFile(path string, side string) {
 	defer conn.Close()
 
 	// Route direction based on config
+	var before os.FileInfo
 	if side == "local" && cfg.DestSide == "remote" {
 		// local → remote (original behavior)
-		err = uploadViaSFTP(conn, path)
+		// Snapshot the file first so handleAfterUpload can tell if it
+		// changed while uploading.
+		before, err = os.Stat(path)
+		if err == nil {
+			err = uploadViaSFTP(conn, path)
+		}
 	} else if side == "remote" && cfg.DestSide == "local" {
 		// remote → local (new)
 		err = downloadViaSFTP(conn, path)
@@ -50,4 +57,8 @@ func handleNewFile(path string, side string) {
 
 	logger.Printf("INFO | Sync complete: %s", filename)
 	notifyDiscord(fmt.Sprintf("Synced: %s → %s", filename, cfg.DestSide))
+
+	if side == "local" {
+		handleAfterUpload(path, before)
+	}
 }
