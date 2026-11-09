@@ -1,0 +1,289 @@
+.TH RELAYFSD 1 "2026-11-09" "relayfsd 2.0.0" "User Commands"
+.SH NAME
+relayfsd \- watch a directory and transfer new files over SFTP
+.SH SYNOPSIS
+.B relayfsd
+.br
+.B relayfsd \-\-config
+.SH DESCRIPTION
+.B relayfsd
+watches a directory for new files and copies each one to another
+machine over SFTP. It runs in the foreground until it is stopped, and is
+normally run as a systemd user service.
+.PP
+It works in one of two directions:
+.TP
+.B local \(-> remote
+A local directory is watched with inotify, including any subdirectories
+created later. Each new file is uploaded to
+.I remote_dir
+on the server. This is the default.
+.TP
+.B remote \(-> local
+A remote directory is polled over SFTP every 10 seconds. Each new file
+is downloaded to the local
+.IR watch_path .
+Files already in the remote directory when
+.B relayfsd
+first connects are not downloaded.
+.PP
+If the server cannot be reached,
+.B relayfsd
+waits and tries again, doubling the delay each time up to 5 minutes. It
+logs once when the server goes offline and once when it comes back.
+.SH OPTIONS
+.TP
+.B \-\-config
+Run the interactive setup wizard, then exit. The wizard asks for the
+server address, login details, the directions to sync in, the directories
+to use, what to do with local files after upload, and Discord
+notifications. Each prompt shows the current value; press Enter to keep
+it. The result is written to
+.IR data.json .
+.PP
+With no options,
+.B relayfsd
+loads
+.I data.json
+and starts watching. If the file is missing, it prints a message telling
+you to run
+.B relayfsd \-\-config
+and exits.
+.SH CONFIGURATION
+Settings are stored as JSON in
+.I data.json
+in the current working directory, created with mode 0600. The keys are:
+.TP
+.B ip
+Hostname or IP address of the server. The SSH connection always uses
+port 22.
+.TP
+.B username
+SSH user name.
+.TP
+.B auth_method
+.B key
+or
+.BR password .
+If unset,
+.B password
+is used, so configurations written before key support keep working.
+.TP
+.B key_path
+Private key file for
+.B key
+authentication. A leading
+.I \(ti/
+is expanded to the home directory. The wizard suggests
+.IR \(ti/.ssh/id_ed25519 .
+.TP
+.B key_passphrase
+Passphrase for an encrypted private key. Leave unset if the key has none.
+.TP
+.B password
+SSH password for
+.B password
+authentication. Choosing
+.B key
+in the wizard removes this from the file.
+.TP
+.B watch_side
+.B local
+(default) or
+.BR remote :
+which side to watch for new files.
+.TP
+.B dest_side
+.B remote
+(default) or
+.BR local :
+which side to send new files to. It must be the opposite of
+.BR watch_side ;
+other combinations are logged as unsupported and nothing is copied.
+.TP
+.B watch_path
+The local directory. It is the directory being watched when
+.B watch_side
+is
+.BR local ,
+and the download target when it is
+.BR remote .
+.TP
+.B remote_dir
+The remote directory. It is the upload target when
+.B watch_side
+is
+.BR local ,
+and the directory being polled when it is
+.BR remote .
+.TP
+.B after_upload
+What to do with a local file after it has been uploaded:
+.B keep
+(default) leaves it alone,
+.B move
+moves it to
+.IR move_dir ,
+and
+.B delete
+removes it permanently. This only applies in the local \(-> remote
+direction and is ignored otherwise.
+.TP
+.B move_dir
+Destination directory when
+.B after_upload
+is
+.BR move .
+It is created if it does not exist. It must not be inside
+.IR watch_path ,
+or moved files would be uploaded again. If a file with the same name
+already exists there, a
+.RI \(dq " (1)" \(dq
+suffix (or a higher number) is added before the extension.
+.TP
+.B notifications.discord.enabled
+.B true
+to post messages to a Discord webhook.
+.TP
+.B notifications.discord.webhook_url
+The Discord webhook URL.
+.SS After-upload safeguards
+A local file is moved or deleted only when all of these hold:
+.IP \(bu 2
+the remote copy exists and has the same size as the bytes uploaded;
+.IP \(bu 2
+the local file's size and modification time did not change during the
+upload. A file that is still being written is left in place.
+.PP
+When
+.B after_upload
+is
+.BR delete ,
+the wizard asks you to type
+.B yes
+before enabling it. Every move, delete, skip and failure is logged, and
+failures also send a Discord notification.
+.SH FILES
+Both files are relative to the current working directory. The supplied
+systemd unit sets this to the user's home directory.
+.TP
+.I data.json
+Configuration file. See
+.BR CONFIGURATION .
+.TP
+.I relayfsd.log
+Log file, appended to on every run. Lines have the form
+.RI \(dq "date time LEVEL | message" \(dq,
+where
+.I LEVEL
+is
+.BR INFO ,
+.BR WARN ,
+.BR ERROR " or " FATAL .
+.TP
+.I /usr/lib/systemd/user/relayfsd.service
+systemd user unit. It runs
+.B relayfsd
+from the home directory and restarts it 30 seconds after a failure.
+.SH NOTIFICATIONS
+With Discord notifications enabled,
+.B relayfsd
+posts a message when a file has been transferred, when a transfer fails,
+when a move or delete after upload fails, and when an offline server
+comes back online.
+.SH EXIT STATUS
+.TP
+.B 0
+The wizard finished, or the watcher stopped normally.
+.TP
+.B 1
+The configuration is missing or cannot be parsed, the SSH key cannot be
+loaded, the authentication or after-upload settings are invalid, the
+configuration could not be saved, or the watcher failed to start.
+.SH EXAMPLES
+Set up a key and configure
+.B relayfsd
+to use it:
+.PP
+.RS 4
+.EX
+$ ssh\-keygen \-t ed25519
+$ ssh\-copy\-id user@server
+$ relayfsd \-\-config
+.EE
+.RE
+.PP
+Run in the background as a user service, starting at login:
+.PP
+.RS 4
+.EX
+$ systemctl \-\-user enable \-\-now relayfsd
+.EE
+.RE
+.PP
+Follow the log:
+.PP
+.RS 4
+.EX
+$ tail \-f \(ti/relayfsd.log
+.EE
+.RE
+.PP
+A minimal
+.I data.json
+that uploads new files and moves the originals afterwards:
+.PP
+.RS 4
+.EX
+{
+  "ip": "192.168.1.20",
+  "username": "user",
+  "auth_method": "key",
+  "key_path": "\(ti/.ssh/id_ed25519",
+  "watch_side": "local",
+  "dest_side": "remote",
+  "watch_path": "/home/user/outbox",
+  "remote_dir": "/srv/inbox",
+  "after_upload": "move",
+  "move_dir": "/home/user/sent",
+  "notifications": {
+    "discord": { "enabled": false, "webhook_url": "" }
+  }
+}
+.EE
+.RE
+.SH SECURITY
+The server's host key is not checked, so
+.B relayfsd
+cannot detect a man-in-the-middle on an untrusted network.
+.PP
+Passwords and key passphrases are stored in plain text in
+.IR data.json .
+Key authentication without a passphrase is recommended; it keeps
+.I data.json
+free of secrets.
+.SH BUGS
+Files are transferred to a single flat directory. Subdirectory structure
+is not kept, and a file with the same name as an existing one overwrites
+it.
+.PP
+In the local \(-> remote direction, a file is uploaded as soon as it is
+created. If it is still being written, only part of it may be uploaded.
+.PP
+In the remote \(-> local direction, only files directly inside
+.I remote_dir
+are seen; subdirectories are ignored.
+.PP
+The SSH port is fixed at 22.
+.PP
+Report bugs at
+.UR https://github.com/Almutairi0/relayfsd/issues
+the issue tracker
+.UE .
+.SH SEE ALSO
+.BR ssh (1),
+.BR ssh\-keygen (1),
+.BR ssh\-copy\-id (1),
+.BR sftp (1),
+.BR systemctl (1),
+.BR inotify (7)
