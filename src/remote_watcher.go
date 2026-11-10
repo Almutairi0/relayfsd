@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -56,10 +57,24 @@ func startRemoteWatcher() error {
 	seeded := false
 	delay := time.Duration(0)
 
-	goOffline := func(reason string) {
-		if online {
-			logger.Printf("WARN | Remote %s offline (%s), retrying with backoff up to %s", cfg.IP, reason, maxBackoff)
+	// state is "" while connected, "offline" or "untrusted" otherwise.
+	// Each change is logged once; retries in the same state are quiet.
+	state := ""
+	goOffline := func(err error) {
+		newState := "offline"
+		if isHostKeyError(err) {
+			newState = "untrusted"
+		}
+		if online || state != newState {
+			if newState == "untrusted" {
+				// The details were logged by reportHostKeyError.
+				logger.Printf("ERROR | Remote %s: refusing to connect, its identity could not be verified (%v); retrying with backoff up to %s",
+					cfg.IP, err, maxBackoff)
+			} else {
+				logger.Printf("WARN | Remote %s offline (%v), retrying with backoff up to %s", cfg.IP, err, maxBackoff)
+			}
 			online = false
+			state = newState
 		}
 		if delay < pollInterval {
 			delay = pollInterval
@@ -75,7 +90,7 @@ func startRemoteWatcher() error {
 		time.Sleep(delay)
 
 		if !remoteReachable() {
-			goOffline("SSH port unreachable")
+			goOffline(errors.New("SSH port unreachable"))
 			continue
 		}
 
@@ -83,14 +98,14 @@ func startRemoteWatcher() error {
 		// Done on the first successful connection, not just at startup.
 		if !seeded {
 			if err := seedRemoteSeen(); err != nil {
-				goOffline(err.Error())
+				goOffline(err)
 				continue
 			}
 			seeded = true
 		}
 
 		if err := pollRemote(); err != nil {
-			goOffline(err.Error())
+			goOffline(err)
 			continue
 		}
 
@@ -98,6 +113,7 @@ func startRemoteWatcher() error {
 			logger.Printf("INFO | Remote %s back online", cfg.IP)
 			notifyDiscord(fmt.Sprintf("Remote %s is back online", cfg.IP))
 			online = true
+			state = ""
 		}
 		delay = pollInterval
 	}

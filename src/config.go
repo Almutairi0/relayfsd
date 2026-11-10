@@ -10,14 +10,20 @@ import (
 const configFile = "data.json"
 
 type Config struct {
-	IP            string `json:"ip"`
-	Username      string `json:"username"`
-	Password      string `json:"password"`
-	RemoteDir     string `json:"remote_dir"`
-	WatchPath     string `json:"watch_path"`
-	WatchSide     string `json:"watch_side"`
-	DestSide      string `json:"dest_side"`
-	Notifications struct {
+	IP             string `json:"ip"`
+	Username       string `json:"username"`
+	Password       string `json:"password,omitempty"`
+	AuthMethod     string `json:"auth_method"`                // "password" (default) or "key"
+	KeyPath        string `json:"key_path,omitempty"`         // private key file, used when auth_method is "key"
+	KeyPassphrase  string `json:"key_passphrase,omitempty"`   // only needed for encrypted keys
+	KnownHostsPath string `json:"known_hosts_path,omitempty"` // defaults to ~/.ssh/known_hosts
+	RemoteDir      string `json:"remote_dir"`
+	WatchPath      string `json:"watch_path"`
+	WatchSide      string `json:"watch_side"`
+	DestSide       string `json:"dest_side"`
+	AfterUpload    string `json:"after_upload"`       // "keep" (default), "move" or "delete"
+	MoveDir        string `json:"move_dir,omitempty"` // target folder when after_upload is "move"
+	Notifications  struct {
 		Discord struct {
 			Enabled    bool   `json:"enabled"`
 			WebhookURL string `json:"webhook_url"`
