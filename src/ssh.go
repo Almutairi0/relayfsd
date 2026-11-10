@@ -91,15 +91,26 @@ func expandHome(path string) string {
 }
 
 func newSSHClient() (*ssh.Client, error) {
-	sshCfg := &ssh.ClientConfig{
-		User:            cfg.Username,
-		Auth:            sshAuth,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         10 * time.Second,
+	hostKeyCallback, hostKeyAlgos, err := hostKeyConfig()
+	if err != nil {
+		reportHostKeyError(err)
+		return nil, err
 	}
 
-	conn, err := ssh.Dial("tcp", net.JoinHostPort(cfg.IP, "22"), sshCfg)
+	sshCfg := &ssh.ClientConfig{
+		User:              cfg.Username,
+		Auth:              sshAuth,
+		HostKeyCallback:   hostKeyCallback,
+		HostKeyAlgorithms: hostKeyAlgos,
+		Timeout:           10 * time.Second,
+	}
+
+	conn, err := ssh.Dial("tcp", sshAddr(), sshCfg)
 	if err != nil {
+		err = classifyDialError(err)
+		if reportHostKeyError(err) {
+			return nil, err
+		}
 		if strings.Contains(err.Error(), "unable to authenticate") {
 			return nil, fmt.Errorf("SSH authentication failed for %s@%s using %s auth: %s: %w",
 				cfg.Username, cfg.IP, authMethod(), authHint(), err)
@@ -107,6 +118,7 @@ func newSSHClient() (*ssh.Client, error) {
 		return nil, fmt.Errorf("SSH connection failed: %w", err)
 	}
 
+	hostKeyAccepted()
 	return conn, nil
 }
 
@@ -121,7 +133,7 @@ func authHint() string {
 // remoteReachable does a cheap TCP check on the SSH port (no login),
 // used to detect whether the remote device is online.
 func remoteReachable() bool {
-	conn, err := net.DialTimeout("tcp", net.JoinHostPort(cfg.IP, "22"), 2*time.Second)
+	conn, err := net.DialTimeout("tcp", sshAddr(), 2*time.Second)
 	if err != nil {
 		return false
 	}
