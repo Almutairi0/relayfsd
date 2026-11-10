@@ -20,7 +20,11 @@ func handleNewFile(path string, side string) {
 	conn, err := newSSHClient()
 	if err != nil {
 		logger.Printf("ERROR | Sync failed for %s: %v", path, err)
-		notifyDiscord(fmt.Sprintf("Sync failed: %s\nReason: %v", filename, err))
+		// Host key problems are alerted once by reportHostKeyError, not
+		// once per file.
+		if !isHostKeyError(err) {
+			notifyDiscord(fmt.Sprintf("Sync failed: %s\nReason: %v", filename, err))
+		}
 		if side == "remote" {
 			remoteSeen.unmark(path) // retry on next successful poll
 		}
