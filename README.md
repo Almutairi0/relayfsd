@@ -16,6 +16,7 @@ A lightweight tool that monitors a directory and automatically uploads new or co
 - Send notifications (Discord support)
 - The ability to transfer files from a remote system to the local machine.
 - SSH key authentication
+- Server identity checked against `known_hosts` (protects against man-in-the-middle)
 - Optionally move or delete local files after upload
 ---
 
@@ -85,6 +86,42 @@ The resulting `data.json` contains:
 "auth_method": "key",
 "key_path": "~/.ssh/id_ed25519"
 ```
+
+### Server identity (host key verification)
+
+Before logging in, Relayfsd checks the server's host key against `~/.ssh/known_hosts`, the same file `ssh` uses. This stops a man-in-the-middle from receiving your password or your files.
+
+- **Unknown server:** Relayfsd refuses to start until you trust it.
+- **Changed key:** Relayfsd refuses to connect, logs an error and sends one Discord alert. This also applies if the key is marked `@revoked`, or if the server suddenly offers a different key type than the one recorded.
+
+To trust the server, run `./relayfsd --config`. After you enter the IP, it shows the server's key fingerprint:
+
+```
+The server presented this host key:
+  ssh-ed25519  SHA256:Xk3p9...q7Lw
+Trust this server? (y/N):
+```
+
+To make sure it's genuine, run this **on the server itself** and check that the fingerprints match:
+
+```bash
+ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+```
+
+If you've already connected with `ssh user@server-ip` and accepted the key, the server is already trusted.
+
+If you reinstall the server, its key changes. Remove the old entry and trust the new one:
+
+```bash
+ssh-keygen -R server-ip
+./relayfsd --config
+```
+
+To use a different file, set `"known_hosts_path"` in `data.json` (and add `-f <path>` to the `ssh-keygen -R` command above).
+
+Lines Relayfsd can't parse, such as newer key types, are skipped with a warning in the log. Host certificates (`@cert-authority`) aren't supported. If your server is listed only in one of those ways, `--config` warns you and asks you to type `yes` before trusting its plain key, so compare the fingerprint on the server first.
+
+> **Upgrading:** earlier versions did not check the host key. After upgrading, Relayfsd won't start until you trust the server once with `./relayfsd --config` (or `ssh user@server-ip`).
 
 ### Migrating from password authentication
 

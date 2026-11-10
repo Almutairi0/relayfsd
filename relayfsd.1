@@ -35,7 +35,10 @@ logs once when the server goes offline and once when it comes back.
 .TP
 .B \-\-config
 Run the interactive setup wizard, then exit. The wizard asks for the
-server address, login details, the directions to sync in, the directories
+server address (required) and user name, then fetches the server's host
+key and shows its fingerprint so you can confirm it (see
+.BR "HOST KEY VERIFICATION" ).
+It then asks how to log in, the directions to sync in, the directories
 to use, what to do with local files after upload, and Discord
 notifications. Each prompt shows the current value; press Enter to keep
 it. The result is written to
@@ -48,7 +51,8 @@ loads
 and starts watching. If the file is missing, it prints a message telling
 you to run
 .B relayfsd \-\-config
-and exits.
+and exits. It also exits if the server is not listed in the known_hosts
+file.
 .SH CONFIGURATION
 Settings are stored as JSON in
 .I data.json
@@ -109,6 +113,14 @@ is
 and the download target when it is
 .BR remote .
 .TP
+.B known_hosts_path
+known_hosts file used to check the server's identity. Defaults to
+.IR \(ti/.ssh/known_hosts ,
+the same file
+.BR ssh (1)
+uses. Only set by editing
+.IR data.json .
+.TP
 .B remote_dir
 The remote directory. It is the upload target when
 .B watch_side
@@ -163,6 +175,93 @@ the wizard asks you to type
 .B yes
 before enabling it. Every move, delete, skip and failure is logged, and
 failures also send a Discord notification.
+.SH HOST KEY VERIFICATION
+Before logging in,
+.B relayfsd
+checks that the server's host key is listed in the known_hosts file.
+This check happens before any password or key is sent, so an impostor
+never receives your credentials or files.
+.IP \(bu 2
+If the server is not listed,
+.B relayfsd
+refuses to start. If its entry disappears while
+.B relayfsd
+is running, connections are refused and one Discord alert is sent.
+.IP \(bu 2
+If it is listed but presents a different key, a key marked
+.BR @revoked ,
+or none of the key types recorded for it,
+.B relayfsd
+refuses to connect, logs an error and sends one Discord alert. Retries
+are not alerted again until a connection succeeds or the error changes.
+Files that fail to transfer meanwhile are logged but not alerted
+individually.
+.B relayfsd
+keeps running, and connections work again once the problem is fixed.
+.PP
+Only the key types recorded for the server are accepted, so the server
+cannot switch to a different, unrecorded key. Host certificates and
+.B @cert-authority
+lines are not supported. Lines
+.B relayfsd
+cannot parse, such as key types it does not know, are skipped with a
+warning in the log, as
+.BR ssh (1)
+does. A server listed only by such lines is not trusted; the wizard
+warns that
+.BR ssh (1)
+already knows it and asks you to type
+.B yes
+before trusting its plain key, so check the fingerprint first.
+.PP
+The configured
+.B ip
+is lowercased before lookup, matching the lowercase names
+.BR ssh (1)
+writes; entries written by hand must also be lowercase.
+.PP
+The known_hosts file is read again on every connection, so a server
+trusted while
+.B relayfsd
+is running is picked up without a restart.
+.PP
+To trust a server, run
+.BR "relayfsd \-\-config" .
+It shows the server's key fingerprint and asks for confirmation. To be
+sure, compare it with the fingerprint printed on the server itself:
+.PP
+.RS 4
+.EX
+$ ssh\-keygen \-lf /etc/ssh/ssh_host_ed25519_key.pub
+.EE
+.RE
+.PP
+Connecting once with
+.B ssh user@server
+and accepting the key works too. Hashed entries are supported. The
+wizard asks for an Ed25519 key first, the same as
+.BR ssh (1),
+and falls back to other key types only if the server has no Ed25519
+key.
+.PP
+If the server was reinstalled and its key changed legitimately, remove
+the old entry and trust the new one:
+.PP
+.RS 4
+.EX
+$ ssh\-keygen \-R server
+$ relayfsd \-\-config
+.EE
+.RE
+.PP
+With a custom
+.BR known_hosts_path ,
+add
+.B \-f
+.I path
+to the
+.B ssh\-keygen
+command.
 .SH FILES
 Both files are relative to the current working directory. The supplied
 systemd unit sets this to the user's home directory.
@@ -189,8 +288,8 @@ from the home directory and restarts it 30 seconds after a failure.
 With Discord notifications enabled,
 .B relayfsd
 posts a message when a file has been transferred, when a transfer fails,
-when a move or delete after upload fails, and when an offline server
-comes back online.
+when a move or delete after upload fails, when an offline server
+comes back online, and when the server's host key is rejected.
 .SH EXIT STATUS
 .TP
 .B 0
@@ -198,7 +297,8 @@ The wizard finished, or the watcher stopped normally.
 .TP
 .B 1
 The configuration is missing or cannot be parsed, the SSH key cannot be
-loaded, the authentication or after-upload settings are invalid, the
+loaded, the server is not in the known_hosts file, the authentication
+or after-upload settings are invalid, the
 configuration could not be saved, or the watcher failed to start.
 .SH EXAMPLES
 Set up a key and configure
@@ -253,9 +353,8 @@ that uploads new files and moves the originals afterwards:
 .EE
 .RE
 .SH SECURITY
-The server's host key is not checked, so
-.B relayfsd
-cannot detect a man-in-the-middle on an untrusted network.
+The server's host key is always checked; see
+.BR "HOST KEY VERIFICATION" .
 .PP
 Passwords and key passphrases are stored in plain text in
 .IR data.json .
@@ -282,6 +381,7 @@ the issue tracker
 .UE .
 .SH SEE ALSO
 .BR ssh (1),
+.BR sshd (8),
 .BR ssh\-keygen (1),
 .BR ssh\-copy\-id (1),
 .BR sftp (1),
