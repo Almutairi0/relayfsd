@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"syscall"
 
+	"golang.org/x/crypto/ssh"
 	"golang.org/x/term"
 )
 
@@ -22,8 +24,10 @@ func runConfigWizard() {
 	// Load existing config if it exists so we can show current values
 	existing := loadConfigSilent()
 
-	cfg.IP = promptString(reader, "Remote server IP", existing.IP)
+	cfg.IP = promptRequired(reader, "Remote server IP", existing.IP)
 	cfg.Username = promptString(reader, "SSH username", existing.Username)
+	cfg.KnownHostsPath = existing.KnownHostsPath // only set by editing data.json
+	promptHostKey(reader)
 
 	fmt.Println()
 	fmt.Println("How should Relayfsd log in to the server?")
@@ -280,4 +284,121 @@ func promptAfterUpload(reader *bufio.Reader, existing Config) {
 			cfg.AfterUpload = afterUploadKeep
 		}
 	}
+}
+
+// promptHostKey fetches the server's host key, shows its fingerprint and
+// asks the user to trust it. Nothing is sent to the server but the
+// connection attempt itself, so no credentials can leak to an impostor.
+func promptHostKey(reader *bufio.Reader) {
+	fmt.Println()
+	fmt.Printf("Checking the identity of %s...\n", cfg.IP)
+
+	key, status, err := inspectHostKey()
+	if err != nil {
+		fmt.Printf("⚠️  %v\n", err)
+		fmt.Println("   The config will still be saved, but Relayfsd won't connect until")
+		fmt.Println("   the server is trusted. Run --config again once it's reachable.")
+		return
+	}
+
+	switch status {
+	case hostKeyTrusted:
+		fmt.Printf("✅ Server key already trusted (%s %s)\n", key.Type(), ssh.FingerprintSHA256(key))
+
+	case hostKeyMismatch, hostKeyNoCommon, hostKeyRevoked:
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println("🚨 WARNING: THE SERVER'S IDENTITY HAS CHANGED")
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		switch status {
+		case hostKeyMismatch:
+			fmt.Printf("The server now presents:\n  %s  %s\n", key.Type(), ssh.FingerprintSHA256(key))
+			fmt.Printf("but %s has a different key for %s.\n", knownHostsPath(), cfg.IP)
+		case hostKeyRevoked:
+			fmt.Printf("The server presents:\n  %s  %s\n", key.Type(), ssh.FingerprintSHA256(key))
+			fmt.Printf("which is marked @revoked in %s.\n", knownHostsPath())
+		case hostKeyNoCommon:
+			fmt.Printf("The server offers none of the key types %s has for %s.\n", knownHostsPath(), cfg.IP)
+		}
+		fmt.Println()
+		fmt.Println("Someone may be intercepting the connection (man-in-the-middle).")
+		fmt.Println("It is also expected if you reinstalled the server or its SSH keys.")
+		fmt.Println("If you're sure the change is legitimate, remove the old key with:")
+		fmt.Printf("  %s\n", removeCommand())
+		fmt.Println("and run --config again. Relayfsd will not connect until then.")
+
+	case hostKeyUnknown, hostKeyUnverifiable:
+		if status == hostKeyUnverifiable {
+			fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+			fmt.Println("⚠️  THIS SERVER IS ALREADY LISTED, BUT RELAYFSD CAN'T CHECK IT")
+			fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+			fmt.Printf("%s lists %s only through @cert-authority or a key\n", knownHostsPath(), cfg.IP)
+			fmt.Println("Relayfsd can't read, so it can't tell whether the key below is the")
+			fmt.Println("one ssh trusts. Only accept it after comparing the fingerprint on the")
+			fmt.Println("server itself; if it doesn't match, someone may be intercepting the connection.")
+			fmt.Println()
+		}
+		fmt.Println("The server presented this host key:")
+		fmt.Printf("  %s  %s\n", key.Type(), ssh.FingerprintSHA256(key))
+		fmt.Println()
+		fmt.Println("To verify it, run this on the server itself (not over the network)")
+		fmt.Println("and check that the fingerprint matches:")
+		fmt.Printf("  ssh-keygen -lf /etc/ssh/ssh_host_%s_key.pub\n", hostKeyFileName(key.Type()))
+		fmt.Println()
+		accepted := []string{"y", "yes"}
+		if status == hostKeyUnverifiable {
+			fmt.Print("Type 'yes' to trust this key: ")
+			accepted = []string{"yes"}
+		} else {
+			fmt.Print("Trust this server? (y/N): ")
+		}
+
+		answer, _ := reader.ReadString('\n')
+		answer = strings.ToLower(strings.TrimSpace(answer))
+		if !slices.Contains(accepted, answer) {
+			fmt.Println("Not trusted. Relayfsd won't connect until you trust the server.")
+			return
+		}
+		if err := trustHostKey(key); err != nil {
+			fmt.Printf("❌ Could not save the key: %v\n", err)
+			return
+		}
+		fmt.Printf("✅ Saved to %s\n", knownHostsPath())
+	}
+}
+
+// promptRequired is promptString for values that can't be left empty.
+func promptRequired(reader *bufio.Reader, label string, current string) string {
+	for {
+		if current != "" {
+			fmt.Printf("%s [%s]: ", label, current)
+		} else {
+			fmt.Printf("%s: ", label)
+		}
+		input, err := reader.ReadString('\n')
+		input = strings.TrimSpace(input)
+		switch {
+		case input != "":
+			return input
+		case current != "":
+			return current
+		case err != nil: // end of input, asking again won't help
+			fmt.Printf("\n❌ %s is required.\n", label)
+			os.Exit(1)
+		}
+		fmt.Printf("⚠️  %s is required.\n", label)
+	}
+}
+
+// hostKeyFileName maps a key type to the name OpenSSH uses for the
+// server's key file, e.g. ssh_host_ed25519_key.pub.
+func hostKeyFileName(keyType string) string {
+	switch keyType {
+	case ssh.KeyAlgoED25519:
+		return "ed25519"
+	case ssh.KeyAlgoRSA:
+		return "rsa"
+	case ssh.KeyAlgoECDSA256, ssh.KeyAlgoECDSA384, ssh.KeyAlgoECDSA521:
+		return "ecdsa"
+	}
+	return "*"
 }
