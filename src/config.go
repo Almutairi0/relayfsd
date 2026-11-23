@@ -2,8 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	"log"
 	"os"
 )
 
@@ -50,7 +50,9 @@ func loadConfig() {
 	defer f.Close()
 
 	if err := json.NewDecoder(f).Decode(&cfg); err != nil {
-		log.Fatalf("Failed to parse %s: %v", configFile, err)
+		logger.Printf("FATAL | Failed to parse %s: %v", configFile, err)
+		fmt.Printf("❌ Failed to parse %s: %v\n", configFile, err)
+		os.Exit(1)
 	}
 }
 
@@ -65,6 +67,23 @@ func loadConfigSilent() Config {
 	defer f.Close()
 	_ = json.NewDecoder(f).Decode(&existing)
 	return existing
+}
+
+// loadConfigChecked is loadConfigSilent that also reports a data.json
+// that exists but can't be read, so it isn't mistaken for no config.
+func loadConfigChecked() (Config, error) {
+	var c Config
+	data, err := os.ReadFile(configFile)
+	if errors.Is(err, os.ErrNotExist) {
+		return c, nil
+	}
+	if err != nil {
+		return c, err
+	}
+	if err := json.Unmarshal(data, &c); err != nil {
+		return Config{}, fmt.Errorf("%s is not valid JSON: %w", configFile, err)
+	}
+	return c, nil
 }
 
 // saveConfig writes the current cfg to data.json.

@@ -2,18 +2,41 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 )
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "--config" {
-		runConfigWizard()
-		return
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "--config":
+			runConfigWizard()
+			return
+		case "--ui", "ui":
+			runTUI()
+			return
+		case "--help", "-h", "help":
+			printUsage(os.Stdout)
+			return
+		default:
+			// Don't start watching on a typo like --UI.
+			fmt.Fprintf(os.Stderr, "relayfsd: unknown option %q\n\n", os.Args[1])
+			printUsage(os.Stderr)
+			os.Exit(2)
+		}
 	}
 
 	initLogger()
+	logStopSignals()
 	loadConfig()
+	if err := checkDirection(); err != nil {
+		logger.Printf("FATAL | Bad direction: %v", err)
+		fmt.Println("❌", err)
+		os.Exit(1)
+	}
 	if err := setupSSHAuth(); err != nil {
 		logger.Printf("FATAL | SSH auth setup failed: %v", err)
 		fmt.Println("❌", err)
@@ -59,6 +82,28 @@ func main() {
 	logger.Println("INFO | Done")
 }
 
+// logStopSignals logs when the daemon is stopped by Ctrl+C or SIGTERM
+// (systemctl stop/restart), so the log, and the UI reading it, show that
+// it stopped. Unfinished downloads are cleaned up on the next start.
+func logStopSignals() {
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		sig := <-sigs
+		logger.Printf("INFO | Stopped (%v)", sig)
+		os.Exit(0)
+	}()
+}
+
+func printUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: relayfsd [--config | --ui | --help]")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "  (no option)  watch for new files and transfer them")
+	fmt.Fprintln(w, "  --config     set up or change the configuration (line by line)")
+	fmt.Fprintln(w, "  --ui, ui     terminal UI: live status and config editor")
+	fmt.Fprintln(w, "  --help, -h   show this help")
+}
+
 func watchTarget() string {
 	if cfg.WatchSide == "remote" {
 		return cfg.RemoteDir
@@ -80,4 +125,3 @@ func initLogger() {
 	}
 	logger = log.New(f, "", log.LstdFlags)
 }
-

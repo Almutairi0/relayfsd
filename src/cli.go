@@ -33,14 +33,7 @@ func runConfigWizard() {
 	fmt.Println("How should Relayfsd log in to the server?")
 	fmt.Println("  1) key      - SSH key pair (recommended)")
 	fmt.Println("  2) password - SSH password")
-	currentAuth := existing.AuthMethod
-	if currentAuth == "" {
-		if existing.Password != "" {
-			currentAuth = "password" // config from before key support
-		} else {
-			currentAuth = "key"
-		}
-	}
+	currentAuth := defaultAuthMethod(existing)
 	fmt.Printf("Choice [%s]: ", currentAuth)
 
 	authInput, _ := reader.ReadString('\n')
@@ -59,7 +52,7 @@ func runConfigWizard() {
 			defaultKey = "~/.ssh/id_ed25519"
 		}
 		cfg.KeyPath = promptString(reader, "Path to private key", defaultKey)
-		cfg.KeyPassphrase = promptPassword("Key passphrase (leave empty if none)", existing.KeyPassphrase)
+		cfg.KeyPassphrase = promptPassword(reader, "Key passphrase (leave empty if none)", existing.KeyPassphrase)
 		// Password is intentionally not carried over: switching to key auth
 		// removes the stored plaintext password from data.json.
 
@@ -71,61 +64,37 @@ func runConfigWizard() {
 			fmt.Println("   The config will still be saved; fix the key before starting Relayfsd.")
 		}
 	} else {
-		cfg.Password = promptPassword("SSH password", existing.Password)
+		cfg.Password = promptPassword(reader, "SSH password", existing.Password)
 	}
 
 	fmt.Println()
 	fmt.Println("Which side do you want to watch for new files?")
 	fmt.Println("  1) local  - watch your local folder (default)")
 	fmt.Println("  2) remote - watch the remote server folder")
-	fmt.Print("Choice [")
-	if existing.WatchSide != "" {
-		fmt.Print(existing.WatchSide)
-	} else {
-		fmt.Print("local")
+	currentWatch := existing.WatchSide
+	if currentWatch != "local" && currentWatch != "remote" {
+		currentWatch = "local"
 	}
-	fmt.Print("]: ")
-
-	watchInput, _ := reader.ReadString('\n')
-	watchInput = strings.TrimSpace(watchInput)
-	switch watchInput {
-	case "2", "remote":
-		cfg.WatchSide = "remote"
-	case "1", "local", "":
-		cfg.WatchSide = "local"
-	default:
-		if existing.WatchSide != "" {
-			cfg.WatchSide = existing.WatchSide
-		} else {
-			cfg.WatchSide = "local"
-		}
-	}
+	fmt.Printf("Choice [%s]: ", currentWatch)
+	cfg.WatchSide = readSide(reader, "local", "remote", currentWatch)
 
 	fmt.Println()
 	fmt.Println("Where should new files be sent?")
-	fmt.Println("  1) remote - upload to remote server (default)")
+	fmt.Println("  1) remote - upload to remote server")
 	fmt.Println("  2) local  - download to local folder")
-	fmt.Print("Choice [")
-	if existing.DestSide != "" {
-		fmt.Print(existing.DestSide)
-	} else {
-		fmt.Print("remote")
+	// Enter keeps the current choice; if that's no longer possible, it
+	// picks the side that isn't watched.
+	currentDest := existing.DestSide
+	if (currentDest != "local" && currentDest != "remote") || currentDest == cfg.WatchSide {
+		currentDest = defaultDest(cfg.WatchSide)
 	}
-	fmt.Print("]: ")
-
-	destInput, _ := reader.ReadString('\n')
-	destInput = strings.TrimSpace(destInput)
-	switch destInput {
-	case "2", "local":
-		cfg.DestSide = "local"
-	case "1", "remote", "":
-		cfg.DestSide = "remote"
-	default:
-		if existing.DestSide != "" {
-			cfg.DestSide = existing.DestSide
-		} else {
-			cfg.DestSide = "remote"
-		}
+	fmt.Printf("Choice [%s]: ", currentDest)
+	cfg.DestSide = readSide(reader, "remote", "local", currentDest)
+	if cfg.DestSide == cfg.WatchSide {
+		other := map[string]string{"local": "remote", "remote": "local"}[cfg.WatchSide]
+		fmt.Printf("⚠️  Watching %s and sending to %s isn't supported; files will be sent to %s.\n",
+			cfg.WatchSide, cfg.DestSide, other)
+		cfg.DestSide = other
 	}
 	fmt.Println()
 	if cfg.WatchSide == "local" {
@@ -187,6 +156,19 @@ func runConfigWizard() {
 	fmt.Println()
 }
 
+// readSide reads a "1) first / 2) second" answer. Enter, or anything it
+// doesn't understand, keeps current.
+func readSide(reader *bufio.Reader, first, second, current string) string {
+	input, _ := reader.ReadString('\n')
+	switch strings.TrimSpace(input) {
+	case "1", first:
+		return first
+	case "2", second:
+		return second
+	}
+	return current
+}
+
 // promptString shows a prompt with the current value and reads input.
 // If the user just presses Enter, the current value is kept.
 func promptString(reader *bufio.Reader, label string, current string) string {
@@ -206,28 +188,27 @@ func promptString(reader *bufio.Reader, label string, current string) string {
 }
 
 // promptPassword reads a password without echoing it to the terminal.
-func promptPassword(label string, current string) string {
+// When stdin isn't a terminal (input is piped), it reads the next line from
+// reader like the other prompts, since reader may already hold that line.
+func promptPassword(reader *bufio.Reader, label string, current string) string {
 	if current != "" {
 		fmt.Printf("%s [current: ****]: ", label)
 	} else {
 		fmt.Printf("%s: ", label)
 	}
 
-	// Read password without echo
-	raw, err := term.ReadPassword(int(syscall.Stdin))
-	fmt.Println() // move to next line after hidden input
-	if err != nil {
-		// Fallback: read normally if terminal doesn't support it
-		reader := bufio.NewReader(os.Stdin)
-		input, _ := reader.ReadString('\n')
-		input = strings.TrimSpace(input)
-		if input == "" {
-			return current
+	var input string
+	if term.IsTerminal(int(syscall.Stdin)) {
+		raw, err := term.ReadPassword(int(syscall.Stdin))
+		fmt.Println() // move to next line after hidden input
+		if err == nil {
+			input = string(raw)
 		}
-		return input
+	} else {
+		input, _ = reader.ReadString('\n')
 	}
 
-	input := strings.TrimSpace(string(raw))
+	input = strings.TrimSpace(input)
 	if input == "" {
 		return current
 	}
@@ -301,69 +282,118 @@ func promptHostKey(reader *bufio.Reader) {
 		return
 	}
 
+	report := hostKeyReportFor(status, key)
+	if report.Title != "" {
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println(report.Title)
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	}
+	for _, line := range report.Lines {
+		fmt.Println(line)
+	}
+	if !report.CanTrust {
+		return
+	}
+
+	fmt.Println()
+	accepted := []string{"y", "yes"}
+	if report.NeedYes {
+		fmt.Print("Type 'yes' to trust this key: ")
+		accepted = []string{"yes"}
+	} else {
+		fmt.Print("Trust this server? (y/N): ")
+	}
+
+	answer, _ := reader.ReadString('\n')
+	answer = strings.ToLower(strings.TrimSpace(answer))
+	if !slices.Contains(accepted, answer) {
+		fmt.Println("Not trusted. Relayfsd won't connect until you trust the server.")
+		return
+	}
+	if err := trustHostKey(key); err != nil {
+		fmt.Printf("❌ Could not save the key: %v\n", err)
+		return
+	}
+	fmt.Printf("✅ Saved to %s\n", knownHostsPath())
+}
+
+// defaultAuthMethod picks the auth method to offer for an existing config:
+// its own setting, else "password" for configs from before key support,
+// else "key".
+func defaultAuthMethod(existing Config) string {
+	switch {
+	case existing.AuthMethod != "":
+		return existing.AuthMethod
+	case existing.Password != "":
+		return "password"
+	default:
+		return "key"
+	}
+}
+
+// hostKeyReport is what to tell the user about the server's host key.
+// The --config wizard prints it and the terminal UI renders it.
+type hostKeyReport struct {
+	Title    string   // banner for warnings, empty otherwise
+	Lines    []string // body; empty strings are blank lines
+	CanTrust bool     // the user may choose to trust the key
+	NeedYes  bool     // trusting requires typing "yes", not just "y"
+	Danger   bool     // the key changed or was revoked
+}
+
+func hostKeyReportFor(status hostKeyStatus, key ssh.PublicKey) hostKeyReport {
+	var r hostKeyReport
 	switch status {
 	case hostKeyTrusted:
-		fmt.Printf("✅ Server key already trusted (%s %s)\n", key.Type(), ssh.FingerprintSHA256(key))
+		r.Lines = []string{fmt.Sprintf("✅ Server key already trusted (%s %s)", key.Type(), ssh.FingerprintSHA256(key))}
 
 	case hostKeyMismatch, hostKeyNoCommon, hostKeyRevoked:
-		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		fmt.Println("🚨 WARNING: THE SERVER'S IDENTITY HAS CHANGED")
-		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		r.Title = "🚨 WARNING: THE SERVER'S IDENTITY HAS CHANGED"
+		r.Danger = true
 		switch status {
 		case hostKeyMismatch:
-			fmt.Printf("The server now presents:\n  %s  %s\n", key.Type(), ssh.FingerprintSHA256(key))
-			fmt.Printf("but %s has a different key for %s.\n", knownHostsPath(), cfg.IP)
+			r.Lines = append(r.Lines,
+				"The server now presents:",
+				fmt.Sprintf("  %s  %s", key.Type(), ssh.FingerprintSHA256(key)),
+				fmt.Sprintf("but %s has a different key for %s.", knownHostsPath(), cfg.IP))
 		case hostKeyRevoked:
-			fmt.Printf("The server presents:\n  %s  %s\n", key.Type(), ssh.FingerprintSHA256(key))
-			fmt.Printf("which is marked @revoked in %s.\n", knownHostsPath())
+			r.Lines = append(r.Lines,
+				"The server presents:",
+				fmt.Sprintf("  %s  %s", key.Type(), ssh.FingerprintSHA256(key)),
+				fmt.Sprintf("which is marked @revoked in %s.", knownHostsPath()))
 		case hostKeyNoCommon:
-			fmt.Printf("The server offers none of the key types %s has for %s.\n", knownHostsPath(), cfg.IP)
+			r.Lines = append(r.Lines,
+				fmt.Sprintf("The server offers none of the key types %s has for %s.", knownHostsPath(), cfg.IP))
 		}
-		fmt.Println()
-		fmt.Println("Someone may be intercepting the connection (man-in-the-middle).")
-		fmt.Println("It is also expected if you reinstalled the server or its SSH keys.")
-		fmt.Println("If you're sure the change is legitimate, remove the old key with:")
-		fmt.Printf("  %s\n", removeCommand())
-		fmt.Println("and run --config again. Relayfsd will not connect until then.")
+		r.Lines = append(r.Lines,
+			"",
+			"Someone may be intercepting the connection (man-in-the-middle).",
+			"It is also expected if you reinstalled the server or its SSH keys.",
+			"If you're sure the change is legitimate, remove the old key with:",
+			"  "+removeCommand(),
+			"and run --config again. Relayfsd will not connect until then.")
 
 	case hostKeyUnknown, hostKeyUnverifiable:
 		if status == hostKeyUnverifiable {
-			fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-			fmt.Println("⚠️  THIS SERVER IS ALREADY LISTED, BUT RELAYFSD CAN'T CHECK IT")
-			fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-			fmt.Printf("%s lists %s only through @cert-authority or a key\n", knownHostsPath(), cfg.IP)
-			fmt.Println("Relayfsd can't read, so it can't tell whether the key below is the")
-			fmt.Println("one ssh trusts. Only accept it after comparing the fingerprint on the")
-			fmt.Println("server itself; if it doesn't match, someone may be intercepting the connection.")
-			fmt.Println()
+			r.Title = "⚠️  THIS SERVER IS ALREADY LISTED, BUT RELAYFSD CAN'T CHECK IT"
+			r.NeedYes = true
+			r.Lines = append(r.Lines,
+				fmt.Sprintf("%s lists %s only through @cert-authority or a key", knownHostsPath(), cfg.IP),
+				"Relayfsd can't read, so it can't tell whether the key below is the",
+				"one ssh trusts. Only accept it after comparing the fingerprint on the",
+				"server itself; if it doesn't match, someone may be intercepting the connection.",
+				"")
 		}
-		fmt.Println("The server presented this host key:")
-		fmt.Printf("  %s  %s\n", key.Type(), ssh.FingerprintSHA256(key))
-		fmt.Println()
-		fmt.Println("To verify it, run this on the server itself (not over the network)")
-		fmt.Println("and check that the fingerprint matches:")
-		fmt.Printf("  ssh-keygen -lf /etc/ssh/ssh_host_%s_key.pub\n", hostKeyFileName(key.Type()))
-		fmt.Println()
-		accepted := []string{"y", "yes"}
-		if status == hostKeyUnverifiable {
-			fmt.Print("Type 'yes' to trust this key: ")
-			accepted = []string{"yes"}
-		} else {
-			fmt.Print("Trust this server? (y/N): ")
-		}
-
-		answer, _ := reader.ReadString('\n')
-		answer = strings.ToLower(strings.TrimSpace(answer))
-		if !slices.Contains(accepted, answer) {
-			fmt.Println("Not trusted. Relayfsd won't connect until you trust the server.")
-			return
-		}
-		if err := trustHostKey(key); err != nil {
-			fmt.Printf("❌ Could not save the key: %v\n", err)
-			return
-		}
-		fmt.Printf("✅ Saved to %s\n", knownHostsPath())
+		r.CanTrust = true
+		r.Lines = append(r.Lines,
+			"The server presented this host key:",
+			fmt.Sprintf("  %s  %s", key.Type(), ssh.FingerprintSHA256(key)),
+			"",
+			"To verify it, run this on the server itself (not over the network)",
+			"and check that the fingerprint matches:",
+			fmt.Sprintf("  ssh-keygen -lf /etc/ssh/ssh_host_%s_key.pub", hostKeyFileName(key.Type())))
 	}
+	return r
 }
 
 // promptRequired is promptString for values that can't be left empty.

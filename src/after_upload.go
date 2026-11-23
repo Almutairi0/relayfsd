@@ -38,11 +38,11 @@ func validateMoveDir(dir string) error {
 	if dir == "" {
 		return errors.New("after_upload is \"move\" but move_dir is empty")
 	}
-	absMove, err := filepath.Abs(expandHome(dir))
+	absMove, err := resolvePath(expandHome(dir))
 	if err != nil {
 		return err
 	}
-	absWatch, err := filepath.Abs(expandHome(cfg.WatchPath))
+	absWatch, err := resolvePath(expandHome(cfg.WatchPath))
 	if err != nil {
 		return err
 	}
@@ -51,6 +51,27 @@ func validateMoveDir(dir string) error {
 		return fmt.Errorf("move_dir %s is inside the watch folder %s; moved files would be uploaded again", absMove, absWatch)
 	}
 	return nil
+}
+
+// resolvePath makes path absolute and follows symlinks, so a symlink can't
+// hide that one folder is inside another. Parts that don't exist yet (a
+// move_dir created on first use) are kept as they are.
+func resolvePath(path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	missing := ""
+	for dir := abs; ; dir = filepath.Dir(dir) {
+		if real, err := filepath.EvalSymlinks(dir); err == nil {
+			return filepath.Join(real, missing), nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return abs, nil
+		}
+		missing = filepath.Join(filepath.Base(dir), missing)
+	}
 }
 
 // setupAfterUpload validates the after_upload settings at startup.
@@ -99,7 +120,7 @@ func handleAfterUpload(path string, before os.FileInfo) {
 		logger.Printf("WARN | Skipping %s of %s: %v", action, path, err)
 		return
 	}
-	if now.Size() != before.Size() || !now.ModTime().Equal(before.ModTime()) {
+	if changedSince(before, now) {
 		logger.Printf("WARN | Skipping %s of %s: file changed during upload (still being written?)", action, path)
 		return
 	}
@@ -112,6 +133,7 @@ func handleAfterUpload(path string, before os.FileInfo) {
 			return
 		}
 		logger.Printf("INFO | Deleted local file: %s", path)
+		forgetRemoteName(path)
 
 	case afterUploadMove:
 		dest, err := moveFile(path, expandHome(cfg.MoveDir))
@@ -121,6 +143,7 @@ func handleAfterUpload(path string, before os.FileInfo) {
 			return
 		}
 		logger.Printf("INFO | Moved local file: %s -> %s", path, dest)
+		forgetRemoteName(path)
 	}
 }
 
