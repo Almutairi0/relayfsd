@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -17,6 +18,14 @@ func notifyDiscord(message string) {
 	}
 	if d.WebhookURL == "" {
 		logger.Println("WARN | Discord notifications enabled but webhook_url is missing")
+		return
+	}
+
+	// Only send over https, so the message (filenames, server IP) is never
+	// POSTed in cleartext to a misconfigured http:// webhook. warnOnce keeps
+	// this to a single log line instead of one per notification.
+	if u, err := url.Parse(d.WebhookURL); err != nil || u.Scheme != "https" {
+		warnOnce("not sending Discord notification: webhook_url must be an https:// URL")
 		return
 	}
 
