@@ -5,6 +5,8 @@ relayfsd \- watch a directory and transfer new files over SFTP
 .B relayfsd
 .br
 .B relayfsd \-\-config
+.br
+.B relayfsd \-\-ui
 .SH DESCRIPTION
 .B relayfsd
 watches a directory for new files and copies each one to another
@@ -15,17 +17,34 @@ It works in one of two directions:
 .TP
 .B local \(-> remote
 A local directory is watched with inotify, including any subdirectories
-created later. Each new file is uploaded to
+created or moved in later. Each new file is uploaded to
 .I remote_dir
-on the server. This is the default.
+on the server once nobody has written to it for 2 seconds. If it changes
+while it is being uploaded, it is uploaded again once it settles. An
+existing remote file is never overwritten: if the name is taken, for
+example by a same-named file from another subdirectory, a " (1)" suffix
+is added. Uploading the same local file again (it changed) replaces its
+own earlier copy. This is the default.
 .TP
 .B remote \(-> local
-A remote directory is polled over SFTP every 10 seconds. Each new file
-is downloaded to the local
-.IR watch_path .
-Files already in the remote directory when
+A remote directory is polled over SFTP every 10 seconds. A new file is
+downloaded to the local
+.I watch_path
+once its size and modification time are the same on two polls in a row.
+It is downloaded to a hidden temporary file and renamed when complete; a
+local file with the same name is never overwritten (a " (1)" suffix is
+added instead). Files already in the remote directory when
 .B relayfsd
-first connects are not downloaded.
+first connects are not downloaded, except one whose download was cut
+short, or still waiting to start, when
+.B relayfsd
+last stopped.
+.PP
+At most 4 files are transferred at once.
+.PP
+The watched side and the destination must differ;
+.B relayfsd
+refuses to start otherwise.
 .PP
 If the server cannot be reached,
 .B relayfsd
@@ -43,6 +62,25 @@ to use, what to do with local files after upload, and Discord
 notifications. Each prompt shows the current value; press Enter to keep
 it. The result is written to
 .IR data.json .
+.TP
+.B \-\-ui
+Open the full-screen terminal UI. The
+.B Status
+tab follows
+.I relayfsd.log
+as the running daemon writes it, and shows whether the watcher is
+running, whether the server is reachable, and recent transfers. The
+.B Config
+tab edits the same settings as
+.BR \-\-config ,
+including checking and trusting the server's host key, and writes
+.IR data.json .
+The UI never transfers files itself. Run it from the daemon's working
+directory (the home directory for the systemd service) so it finds the
+same files, and restart the daemon after saving a new config.
+.TP
+.BR \-\-help ", " \-h
+Print a short usage message and exit. Any other option is an error.
 .PP
 With no options,
 .B relayfsd
@@ -362,12 +400,18 @@ Key authentication without a passphrase is recommended; it keeps
 .I data.json
 free of secrets.
 .SH BUGS
-Files are transferred to a single flat directory. Subdirectory structure
-is not kept, and a file with the same name as an existing one overwrites
-it.
+Files are transferred to a single flat directory, so subdirectory
+structure is not kept. Which local file went to which " (n)" name is
+only remembered while
+.B relayfsd
+runs; after a restart, a changed file is uploaded under a new name.
 .PP
-In the local \(-> remote direction, a file is uploaded as soon as it is
-created. If it is still being written, only part of it may be uploaded.
+A file is considered complete once it hasn't been written to for 2
+seconds. A writer that pauses for longer gets the file uploaded early;
+it is uploaded again when it changes, but a version that was moved or
+deleted after upload can't be.
+.PP
+A failed upload is not retried until the file changes again.
 .PP
 In the remote \(-> local direction, only files directly inside
 .I remote_dir

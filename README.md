@@ -18,6 +18,7 @@ A lightweight tool that monitors a directory and automatically uploads new or co
 - SSH key authentication
 - Server identity checked against `known_hosts` (protects against man-in-the-middle)
 - Optionally move or delete local files after upload
+- Terminal UI with live status and a config editor (`--ui`)
 ---
 
 ## Installation
@@ -145,9 +146,11 @@ When uploading local files to the server, Relayfsd can clean up after itself. Ch
 | `delete` | Files are permanently deleted |
 
 Safeguards:
+- A file is only uploaded once nothing has written to it for 2 seconds, so files that are still being written aren't sent half-finished. A writer that pauses for longer than that (for example a stalled download) can still get its file uploaded, and with `delete` or `move`, removed, before it's done. Use `keep` if that can happen.
+- Files never overwrite each other on the server. If a file with the same name is already there (for example from another subfolder), the upload gets a ` (1)` suffix. A file that changes is uploaded again over its own copy; after a restart, Relayfsd no longer knows which copy was its own, so it uploads a new ` (1)` copy instead.
 - A file is only moved or deleted after the remote copy is verified to be the same size.
-- If the file changed during the upload (for example, it was still being written), it is left in place.
-- `move_dir` must be outside the watch folder, otherwise moved files would be uploaded again.
+- If the file changed during the upload, it is left in place and uploaded again once it settles.
+- `move_dir` must be outside the watch folder (symlinks are followed), otherwise moved files would be uploaded again.
 - The wizard asks you to type `yes` before enabling `delete`.
 - Every move, delete, skip and failure is written to `relayfsd.log`. Failures also trigger a Discord notification.
 
@@ -164,6 +167,23 @@ go run .
 For first-time setup:
 ```bash
 go run . --config
+```
+
+### Terminal UI
+
+```bash
+relayfsd --ui
+```
+
+A full-screen UI with two tabs (switch with `tab`, `1` or `2`):
+
+- **Status** follows `relayfsd.log` live. It shows whether the watcher is running, whether the server is online, how many files were synced or failed, the most recent transfers, and the log itself.
+- **Config** edits everything `--config` asks for. Move with `↑`/`↓`, press `enter` to edit a field, change options with `←`/`→`, and press `s` to save. "Server identity" checks the server's host key fingerprint and lets you trust it.
+
+The UI never transfers files, so it's safe to open while the daemon is running. It reads `relayfsd.log` and writes `data.json`, plus your `known_hosts` file when you trust a server. Run it from the same directory as the daemon (`~` for the systemd service), and restart the daemon after saving:
+
+```bash
+systemctl --user restart relayfsd
 ```
 
 ---
