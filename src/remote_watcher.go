@@ -123,6 +123,16 @@ func startRemoteWatcher() error {
 	}
 }
 
+// validRemoteName reports whether a server-supplied filename is a plain
+// base name. A malicious or compromised server can return names containing
+// "/" or "..", which must never be used to build a local path (the queued
+// marker, partial-download cleanup) or they would escape the watch folder.
+// The download itself already defends against this with filepath.Base; this
+// keeps the rest of the remote-watch path handling consistent.
+func validRemoteName(name string) bool {
+	return name != "" && name != "." && name != ".." && name == filepath.Base(name)
+}
+
 func pollRemote() error {
 	conn, err := newSSHClient()
 	if err != nil {
@@ -146,6 +156,10 @@ func pollRemote() error {
 	settling := make(map[string]remoteSnapshot)
 	for _, entry := range entries {
 		if entry.IsDir() {
+			continue
+		}
+		if !validRemoteName(entry.Name()) {
+			warnOnce(fmt.Sprintf("skipping remote file with suspicious name %q", entry.Name()))
 			continue
 		}
 		fullPath := cfg.RemoteDir + "/" + entry.Name()
@@ -202,7 +216,8 @@ func seedRemoteSeen() error {
 
 	for _, entry := range entries {
 		// A download cut short by the last shutdown is fetched again.
-		if !entry.IsDir() && !interruptedDownloads[entry.Name()] {
+		// Suspicious names are left unseeded; pollRemote skips them too.
+		if !entry.IsDir() && validRemoteName(entry.Name()) && !interruptedDownloads[entry.Name()] {
 			remoteSeen.mark(cfg.RemoteDir + "/" + entry.Name())
 		}
 	}

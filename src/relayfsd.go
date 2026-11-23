@@ -119,7 +119,9 @@ func destTarget() string {
 }
 
 func initLogger() {
-	f, err := os.OpenFile("relayfsd.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	// 0600: the log records local and remote paths, filenames and the
+	// server address, so it isn't left readable by other users.
+	f, err := os.OpenFile("relayfsd.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
 		log.Fatal(err)
 	}
